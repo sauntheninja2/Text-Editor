@@ -250,6 +250,10 @@ HRESULT TextEditor::Initialize()
         dpiScaleY_ = GetDeviceCaps(screen, LOGPIXELSY) / 96.0f;
         ReleaseDC(0, screen);
 
+        
+
+       
+
 
         wcex.style = CS_HREDRAW | CS_VREDRAW;
         wcex.lpfnWndProc = TextEditor::WndProc;
@@ -453,6 +457,8 @@ HRESULT TextEditor::onRender()
              float width = rect.right / dpiScaleX_;
              float height = rect.bottom / dpiScaleY_;
 
+             
+
 
              hr = m_pIDwriteFactory->CreateTextLayout(
                  userInput.c_str(),
@@ -462,6 +468,32 @@ HRESULT TextEditor::onRender()
                  height,
                  &pTextLayout
              );
+             FLOAT x = 0.0f;
+             FLOAT y = 0.0f;
+             DWRITE_HIT_TEST_METRICS hitTestMetrics;
+             pTextLayout->HitTestTextPosition(
+                 static_cast<UINT32>(userInput.length()),
+                 FALSE,
+                 &x,
+                 &y,
+                 &hitTestMetrics
+             );
+
+             D2D1_POINT_2F start = D2D1::Point2F(x, y);
+             D2D1_POINT_2F end = D2D1::Point2F(x, y + hitTestMetrics.height);
+
+             
+
+             bool showCursor = (GetTickCount() / 500) % 2 == 0;
+             if (showCursor) {
+                 m_pRenderTarget->DrawLine(
+                     start,
+                     end,
+                     m_pLightSlateGrayBrush,
+                     1.0f
+                 );
+             }
+
          }
 
         
@@ -477,6 +509,8 @@ HRESULT TextEditor::onRender()
             pTextLayout,
             m_pLightSlateGrayBrush
         );
+
+        
     }
 
     if (hr == D2DERR_RECREATE_TARGET)
