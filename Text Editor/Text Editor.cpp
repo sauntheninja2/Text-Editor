@@ -19,7 +19,9 @@
 #pragma comment(lib, "d2d1.lib")
 #include <new>
 
-
+/* To load an image using Direct2D these are the steps needed as direct2d dosen't 
+load PNG images directly we have to convert them to bitmaps using WIC and then load it
+*/
 
 template<class Interface>
 inline void SafeRelease(
@@ -65,7 +67,13 @@ private:
     ID2D1SolidColorBrush* m_pLightSlateGrayBrush;
     IDWriteFactory* m_pIDwriteFactory;
     IDWriteTextFormat* m_pITextFormat;
+    IDWriteTextLayout* pTextLayout;
     std::wstring userInput;
+    IWICImagingFactory* m_PIWICFactory;
+    ID2D1Bitmap* m_pD2DBitmap;
+    IWICFormatConverter* m_pConvertedSourceBitmap;
+    float dpiScaleX_;
+    float dpiScaleY_;
 
 	HRESULT CreateDeviceIndepentResources();
 	
@@ -74,6 +82,10 @@ private:
 	void DiscardDeviceResources();
 
 	HRESULT onRender();
+
+    HRESULT CreateBitmapFromFile(HWND m_hwnd);
+    BOOL LocateImageFile(HWND m_hwnd, LPWSTR pszFileName, DWORD cbFileName);
+
 
 	void OnResize(
 		UINT width,
@@ -94,7 +106,10 @@ TextEditor::TextEditor() :
     m_pRenderTarget(NULL),
     m_pLightSlateGrayBrush(NULL),
     m_pITextFormat(NULL),
-    m_pIDwriteFactory(NULL)
+    m_pIDwriteFactory(NULL),
+    m_PIWICFactory(NULL),
+    m_pD2DBitmap(NULL),
+    m_pConvertedSourceBitmap(NULL)
 
 {}
 
@@ -105,6 +120,9 @@ TextEditor::~TextEditor()
     SafeRelease(&m_pLightSlateGrayBrush);
     SafeRelease(&m_pITextFormat);
     SafeRelease(&m_pIDwriteFactory);
+    SafeRelease(&m_PIWICFactory);
+    SafeRelease(&m_pD2DBitmap);
+    SafeRelease(&m_pConvertedSourceBitmap);
 }
 
 void TextEditor::RunMessageLoop()
@@ -146,10 +164,21 @@ HRESULT TextEditor::CreateDeviceResources()
         RECT rc;
         GetClientRect(m_hwnd, &rc);
 
+        
+
         D2D1_SIZE_U size = D2D1::SizeU(
             rc.right - rc.left,
             rc.bottom - rc.top
         );
+
+        D2D1_RECT_F layoutRect = D2D1::Rect(
+            static_cast<FLOAT>(rc.left) / dpiScaleX_,
+            static_cast<FLOAT>(rc.top) / dpiScaleY_,
+            static_cast<FLOAT>(rc.right - rc.left) / dpiScaleX_,
+            static_cast<FLOAT>(rc.bottom - rc.top) / dpiScaleY_
+        );
+
+ 
 
         // Create a Direct2D render target.
         hr = m_pDirect2dFactory->CreateHwndRenderTarget(
@@ -183,7 +212,11 @@ HRESULT TextEditor::CreateDeviceResources()
                 &m_pITextFormat);
         }
 
+        
+
+
     }
+
 
     return hr;
 }
@@ -211,6 +244,13 @@ HRESULT TextEditor::Initialize()
     {
         // Register the window class.
         WNDCLASSEX wcex = { sizeof(WNDCLASSEX) };
+
+        HDC screen = GetDC(0);
+        dpiScaleX_ = GetDeviceCaps(screen, LOGPIXELSX) / 96.0f;
+        dpiScaleY_ = GetDeviceCaps(screen, LOGPIXELSY) / 96.0f;
+        ReleaseDC(0, screen);
+
+
         wcex.style = CS_HREDRAW | CS_VREDRAW;
         wcex.lpfnWndProc = TextEditor::WndProc;
         wcex.cbClsExtra = 0;
@@ -396,11 +436,45 @@ HRESULT TextEditor::onRender()
     {
         m_pRenderTarget->BeginDraw();
         m_pRenderTarget->Clear(D2D1::ColorF(0x1E1E1E));
-        m_pRenderTarget->DrawText(
+       /* m_pRenderTarget->DrawText(
             userInput.c_str(),
             static_cast<UINT32>(userInput.length()),
             m_pITextFormat,
             layoutRect,
+            m_pLightSlateGrayBrush
+        );
+
+        */
+
+         if (SUCCEEDED(hr))
+         {
+             RECT rect;
+             GetClientRect(m_hwnd, &rect);
+             float width = rect.right / dpiScaleX_;
+             float height = rect.bottom / dpiScaleY_;
+
+
+             hr = m_pIDwriteFactory->CreateTextLayout(
+                 userInput.c_str(),
+                 static_cast<UINT32>(userInput.length()),
+                 m_pITextFormat,
+                 width,
+                 height,
+                 &pTextLayout
+             );
+         }
+
+        
+
+        D2D1_POINT_2F origin = D2D1::Point2F(
+            static_cast<FLOAT>(rc.left / dpiScaleX_),
+            static_cast<FLOAT>(rc.top / dpiScaleY_)
+        );
+
+       
+        m_pRenderTarget->DrawTextLayout(
+            origin,
+            pTextLayout,
             m_pLightSlateGrayBrush
         );
     }
